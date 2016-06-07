@@ -82,8 +82,9 @@ var Alpaca = {
 			 },	
 			
 			 parser:function(inHash){
-				 if(!inHash) {
-						inHash = window.location.hash;
+				    if(!inHash) {
+						//inHash = window.location.hash;
+				    	inHash="";
 					}else{
 						window.location.hash =inHash;
 					}  			    
@@ -310,8 +311,9 @@ var Alpaca = {
 				return  tpl;	
 			},
 			
-			loadData: function(tpl){
-				return doT.template(tpl);
+			loadData: function(tpl,data){	
+				var interText = doT.template(tpl);				
+				return interText(data);
 			},
 			
 			create : function(data){return {
@@ -392,10 +394,9 @@ var Alpaca = {
 				render:function(){
 					var tpl =  Alpaca.ViewModel.getTemplate(this.Template);		
 					
-					var interText =  Alpaca.ViewModel.loadData(tpl);	
+					var html =  Alpaca.ViewModel.loadData(tpl,this.Data);	
 					
-
-					$(this.CaptureTo).html(interText(this.Data));
+					$(this.CaptureTo).html(html);
 					
 					if(this.hasChildren){						
 						  for(var index in this.Children){
