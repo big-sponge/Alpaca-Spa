@@ -1,0 +1,33 @@
+*{
+	box-sizing : border-box ;
+    moz-box-sizing: border-box;
+	padding: 0;
+	margin: 0;
+}
+
+
+html{
+	font-family: "Microsoft YaHei","lucida Grande", Verdana;   
+	font-size: 14px;
+	color: #222;	
+}
+
+body{
+	/*background-color:#f2f2f5;*/
+	background: #ffffff;
+	color: #222;
+	margin:0;
+	padding:0;
+}
+
+
+ul, ol {
+  list-style: none outside none;
+}
+
+a, a:hover, a:visited, a:visited {
+	text-decoration: none;
+	/* color: #222; */
+}
+
+
