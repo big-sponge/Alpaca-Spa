@@ -4,7 +4,8 @@
 var VERSIONMODE_DEVELOPMENT = 1;
 var VERSIONMODE_PRODUCT = 2;
 
-var Alpaca = {											
+var Alpaca = {	
+				
 		Version:{
 			VersionMode: VERSIONMODE_DEVELOPMENT,
 			VersionNumber: "1.0.0",						
@@ -27,19 +28,45 @@ var Alpaca = {
 			}
 		},
 		
-		run: function(inHash){
+		run: function(runHash){
 			
 			//1.检查版本			
 			this.Version.update();
+						
+			//2.记录当前页面路由					
+			var nowHash = window.location.hash;			
+			if(!nowHash){ nowHash = ""; }			
+			if(!runHash){ runHash = ""; }
+						
+			//3.执行新的路由(run方法，应用初始路由).
+			this.forward(runHash);
 			
-			//2.开始路由			
-			this.Router.start(inHash);	
+			//4.之前页面路由与run路由不一样的时候，执行之前路由 (刷新的时候 不跳回主页).
+			if(nowHash != runHash){				
+				this.forward(nowHash);	
+			}
 		},
 		
 		forward:function(inHash){
+					 
+			//开始路由
 			this.Router.start(inHash);
+			
+			//关闭 或者开启Onhashchange 事件	
+			if(window.location.hash != inHash){
+				Alpaca.isLoadOnhashchange = false;
+			}else{
+				Alpaca.isLoadOnhashchange = true;
+			}
+			
+			//设置hash
+			if(inHash){
+				window.location.hash = inHash;
+			}
+				
+			return true;
 		},
-
+		
 		Router:{
 			
 			ModulePostfix:'Module',
@@ -71,27 +98,43 @@ var Alpaca = {
 			ControllerFullName:null,
 			
 			ActionFullName:null,
+			
+			Params : new Array(),
 									
 			start : function(inHash){
-	  
+	  						
 				//解析路由，生成Module、Controller、Action
 				var actionName = this.parser(inHash);		    
 		    		
-				//分发-执行Action				
-				var actionResult = this.dispatcher(actionName);											
+				//执行分发之前的事件
+				var initResult = this.init();
+				if(initResult !== undefined){
+					return;		
+				}
+
+				//分发-执行Action
+				this.dispatcher(actionName);	
+				
+				//执行分发后的事件
+				var releaseResult = this.release();
 			 },	
 			
 			 parser:function(inHash){
+				 					
 				    if(!inHash) {
-						//inHash = window.location.hash;
-				    	inHash="";
-					}else{
-						window.location.hash =inHash;
-					}  			    
+				    	inHash="";								    	
+					} 	
+				      		    
+					if(inHash.indexOf("?") != -1){
+						inHash = inHash.slice(0,inHash.indexOf("?"));
+					}						
+					
 					console.log(inHash);
-				    
 				    var segments= new Array(); 
+				    
 				    segments=inHash.split("/");
+				    
+				    
 				    if(!segments[3]){	    				    	
 				    	segments.splice(1, 0, this.DefaultModule); 
 				    }
@@ -104,6 +147,9 @@ var Alpaca = {
 				    	segments.splice(1, 0, this.DefaultController); 
 				    }
 		    
+				    //保存路由中的其他字段到参数
+				    this.Params = segments.slice(4);
+				    				    
 				    // Module
 				    this.Module = segments[1];		    
 				    this.ModuleName = this.Module + this.ModulePostfix;			    
@@ -138,152 +184,150 @@ var Alpaca = {
 					return actionName;
 			 },
 			 
-			 dispatcher:function(actionName){
-				 				 
-				 			 
-					//执行模块init方法，如果该方法存在				 
+			 init:function(){					 
+				    //执行模块init方法，如果该方法存在	
+				    var moduleResult = undefined;
 					if(eval(this.ModuleFullName) && eval(this.ModuleFullName+".init")){
-						var moduleResult = eval(this.ModuleFullName+".init" +"()");
-						if(moduleResult === false){
-							return;
-						}
-						if(moduleResult){
-							return moduleResult;
-						}
+						moduleResult = eval(this.ModuleFullName+".init" +"()");
+					}else{
+						moduleResult = eval("Alpaca.AlpacaModule.init()");
 					}
 					
-					//执行控制器init方法，如果该方法存在
-					if(eval(this.ModuleFullName) && eval(this.ControllerFullName) && eval(this.ControllerFullName+".init")){						
-						var controllerResult = eval(this.ControllerFullName+".init" +"()");
-						if(controllerResult === false){
-							return;
-						}	
-						if(controllerResult){
-							return controllerResult;
-						}
+					if(moduleResult !== undefined){						
+						return moduleResult;
 					}
-										
+															
+					//执行控制器init方法，如果该方法存在
+					var controllerResult= undefined;
+					if(eval(this.ModuleFullName) && eval(this.ControllerFullName) && eval(this.ControllerFullName+".init")){						
+						controllerResult = eval(this.ControllerFullName+".init" +"()");
+					}else{
+						controllerResult = eval("Alpaca.AlpacaModule.AlpacaController.init()");
+					}
+					
+					if(controllerResult !== undefined){					
+						return controllerResult;
+					}	
+					
+					return undefined;
+			 },
+			 
+			 dispatcher:function(actionName){
+				 				 				 			 											
 					//执行Action
-					actionResult = eval(actionName +"()");	
+					var view = eval(actionName +"()");	
 																			
 					//View
-					if(!actionResult){
+					if(!view){
 						if(eval(this.ControllerFullName+".getDefaultView")){
-							actionResult = eval(this.ControllerFullName+".getDefaultView" +"()");
+							view = eval(this.ControllerFullName+".getDefaultView" +"(view)");
 						}else if(eval(this.ModuleFullName+".getDefaultView")){
-							actionResult = eval(this.ModuleFullName+".getDefaultView" +"()");
+							view = eval(this.ModuleFullName+".getDefaultView" +"(view)");
 						}else{							
-							actionResult = this.getDefaultView();
+							view = Alpaca.ViewModel.getDefaultView(view);
 						}
 						
 						//View为空直接返回
-						if(!actionResult){
+						if(!view){
 							return;
 						}
 					}
 																
 					//View - Template
-					if(!actionResult.Template){
+					if(!view.Template){
 						if(eval(this.ControllerFullName+".getDefaultViewTemplate")){
-							actionResult.Template = eval(this.ControllerFullName+".getDefaultViewTemplate" +"()");
+							view.Template = eval(this.ControllerFullName+".getDefaultViewTemplate" +"()");
 						}else if(eval(this.ModuleFullName+".getDefaultViewTemplate")){
-							actionResult.Template = eval(this.ModuleFullName+".getDefaultViewTemplate" +"()");
+							view.Template = eval(this.ModuleFullName+".getDefaultViewTemplate" +"()");
 						}else{							
-							actionResult.Template = this.getDefaultViewTemplate();
+							view.Template = Alpaca.ViewModel.getDefaultViewTemplate();
 						}
 					}
 					
 					
 					//View - CaptureTo					
-					if(!actionResult.CaptureTo){
+					if(!view.CaptureTo){
 						if(eval(this.ControllerFullName+".getDefaultViewCaptureTo")){
-							actionResult.CaptureTo = eval(this.ControllerFullName+".getDefaultViewCaptureTo" +"()");
+							view.CaptureTo = eval(this.ControllerFullName+".getDefaultViewCaptureTo" +"()");
 						}else if(eval(this.ModuleFullName+".getDefaultViewCaptureTo")){
-							actionResult.CaptureTo = eval(this.ModuleFullName+".getDefaultViewCaptureTo" +"()");
+							view.CaptureTo = eval(this.ModuleFullName+".getDefaultViewCaptureTo" +"()");
 						}else{							
-							if(actionResult.UseLayout){	
-								actionResult.CaptureTo = this.getDefaultViewCaptureTo();
+							if(view.UseLayout){	
+								view.CaptureTo = Alpaca.ViewModel.getDefaultViewCaptureTo();
 							}else{
-								actionResult.CaptureTo = this.getDefaultLayoutCaptureTo();
+								view.CaptureTo = Alpaca.ViewModel.getDefaultLayoutCaptureTo();
 							}						
 						}					
 					}
 										
 					//Layout
-					if(actionResult.UseLayout){	
-						
+					if(view.UseLayout){	
 						//Layout
-						if(!actionResult.Layout){							
+						if(!view.Layout){							
 							if(eval(this.ControllerFullName+".getDefaultLayout")){
-								actionResult.setLayout(eval(this.ControllerFullName+".getDefaultLayout" +"()"));
+								view.setLayout(eval(this.ControllerFullName+".getDefaultLayout" +"(view.Layout)"));
 							}else if(eval(this.ControllerFullName+".getDefaultLayout")){
-								actionResult.setLayout(eval(this.ModuleFullName+".getDefaultLayout" +"()"));
+								view.setLayout(eval(this.ModuleFullName+".getDefaultLayout" +"(view.Layout)"));
 							}else{							
-								actionResult.setLayout(this.getDefaultLayout());
+								view.setLayout(Alpaca.ViewModel.getDefaultLayout(view.Layout));
 							}							
 						}	
 						
 						//Layout - Template
-						if(!actionResult.Layout.Template){							
+						if(!view.Layout.Template){							
 							if(eval(this.ControllerFullName+".getDefaultLayoutTemplate")){
-								actionResult.Layout.Template = eval(this.ControllerFullName+".getDefaultLayoutTemplate" +"()");
+								view.Layout.Template = eval(this.ControllerFullName+".getDefaultLayoutTemplate" +"()");
 							}else if(eval(this.ModuleFullName+".getDefaultLayoutTemplate")){
-								actionResult.Layout.Template = eval(this.ModuleFullName+".getDefaultLayoutTemplate" +"()");
+								view.Layout.Template = eval(this.ModuleFullName+".getDefaultLayoutTemplate" +"()");
 							}else{							
-								actionResult.Layout.Template = this.getDefaultLayoutTemplate();
+								view.Layout.Template = Alpaca.ViewModel.getDefaultLayoutTemplate();
 							}												
 						}
 						
 						//Layout- CaptureTo
-						if(!actionResult.Layout.CaptureTo){
+						if(!view.Layout.CaptureTo){
 							if(eval(this.ControllerFullName+".getDefaultLayoutCaptureTo")){
-								actionResult.Layout.CaptureTo = eval(this.ControllerFullName+".getDefaultLayoutCaptureTo" +"()");
+								view.Layout.CaptureTo = eval(this.ControllerFullName+".getDefaultLayoutCaptureTo" +"()");
 							}else if(eval(this.ModuleFullName+".getDefaultLayoutCaptureTo")){
-								actionResult.Layout.CaptureTo = eval(this.ModuleFullName+".getDefaultLayoutCaptureTo" +"()");
+								view.Layout.CaptureTo = eval(this.ModuleFullName+".getDefaultLayoutCaptureTo" +"()");
 							}else{							
-								actionResult.Layout.CaptureTo = this.getDefaultLayoutCaptureTo();
+								view.Layout.CaptureTo = Alpaca.ViewModel.getDefaultLayoutCaptureTo();
 							}
 						}
 					}
 						
 					//执行控制器onDisplay方法，如果该方法存在												
 					if(eval(this.ControllerFullName+".onDisplay")){		
-						actionResult = eval(this.ControllerFullName+".onDisplay" +"(actionResult)");
+						view = eval(this.ControllerFullName+".onDisplay" +"(view)");
 					}
 					
 					//执行模块onDisplay方法，如果该方法存在												
 					if(eval(this.ModuleFullName+".onDisplay")){		
-						actionResult = eval(this.ControllerFullName+".onDisplay" +"(actionResult)");
+						view = eval(this.ControllerFullName+".onDisplay" +"(view)");
 					}
+							 			 
+					//渲染视图
+					view.display();
 										
-					actionResult.display();
 			 },
-			 	
-			 
-			 getDefaultView:function(){		
-
-				return null;
+			 			 
+			 release:function(){	
+				 
+					//执行控制器release方法，如果该方法存在		
+					if(eval(this.ModuleFullName) && eval(this.ControllerFullName) && eval(this.ControllerFullName+".release")){						
+						eval(this.ControllerFullName+".release" +"()");
+					}else{
+						eval("Alpaca.AlpacaModule.AlpacaController.release()");
+					}
+					
+					//执行模块release方法，如果该方法存在				 
+					if(eval(this.ModuleFullName) && eval(this.ModuleFullName+".release")){
+						eval(this.ModuleFullName+".release" +"()");
+					}else{
+						eval("Alpaca.AlpacaModule.release()");
+					}
 			 },	
-			 
-			 getDefaultViewCaptureTo:function(){
-				return Alpaca.ViewModel.DefaultViewCaptureTo;
-			 },
-			 
-			 getDefaultViewTemplate:function(){
-				return "/" + this.Module + "/view/" + this.Controller+ "/" +this.Action + "."+Alpaca.ViewModel.TemplatePostfix;
-			 },
-				
-			 getDefaultLayout:function(){
-				return new View();
-			 },
-			 
-			 getDefaultLayoutTemplate:function(){
-				return "/" + this.Module + "/view/layout/layout."+Alpaca.ViewModel.TemplatePostfix;
-			 },
-			 
-			 getDefaultLayoutCaptureTo:function(){
-				return Alpaca.ViewModel.DefaultLayoutCaptureTo;
-			 },
+			 		
 	  },
 				
 		ViewModel:{
@@ -316,6 +360,31 @@ var Alpaca = {
 				return interText(data);
 			},
 			
+			
+			getDefaultView:function(view){
+				return undefined;
+			},	
+			
+			getDefaultViewCaptureTo:function(){
+				return Alpaca.ViewModel.DefaultViewCaptureTo;
+			},
+				 
+			getDefaultViewTemplate:function(){
+				return "/" + Alpaca.Router.Module + "/view/" + Alpaca.Router.Controller+ "/" +Alpaca.Router.Action + "."+Alpaca.ViewModel.TemplatePostfix;
+			},
+					
+			getDefaultLayout:function(layout){
+				return new View();
+			},
+				 
+			getDefaultLayoutTemplate:function(){
+				return "/" + Alpaca.Router.Module + "/view/layout/layout."+Alpaca.ViewModel.TemplatePostfix;
+			},
+				 
+			getDefaultLayoutCaptureTo:function(){
+				return Alpaca.ViewModel.DefaultLayoutCaptureTo;
+			},
+			
 			create : function(data){return {
 				CaptureTo:null,
 				EnableView:true,
@@ -326,6 +395,8 @@ var Alpaca = {
 				LayoutData: null,
 				Children: new Array(),	
 				ChildrenData: new Array(),
+				getTemplate:Alpaca.ViewModel.getTemplate,
+				loadData:Alpaca.ViewModel.loadData,
 				
 				disableView:function(){
 					this.EnableView = false;
@@ -347,8 +418,7 @@ var Alpaca = {
 					return this;
 				},
 				
-				setTemplate:function(template){
-					
+				setTemplate:function(template){			
 					this.Template=template;
 					return this;
 				},
@@ -386,16 +456,23 @@ var Alpaca = {
 					return this;
 				},
 						
-				hasChildren:function(){					
-					console.log(this.Children);
+				hasChildren:function(){
 					return (0 <(this.Children).length);
 				},
-									
+				setFuncGetTemplate:function( func ){					
+					this.getTemplate = func;
+					return this;
+				},			
+				
+				setFuncLoadData:function( func ){					
+					this.loadData = func;
+					return this;
+				},	
+				
 				render:function(){
-					var tpl =  Alpaca.ViewModel.getTemplate(this.Template);		
+					var tpl = this.getTemplate(this.Template);	
 					
-					var html =  Alpaca.ViewModel.loadData(tpl,this.Data);	
-					
+					var html = this.loadData(tpl,this.Data);						
 					$(this.CaptureTo).html(html);
 					
 					if(this.hasChildren){						
@@ -425,7 +502,25 @@ var Alpaca = {
 		},
 				
 		AlpacaModule:{
+			
+			init:function(){	
+				console.log("AlpacaModule init");
+			},
+			
+			release:function(){
+				console.log("AlpacaModule release");
+			},
+			
 			AlpacaController:{
+				
+				init:function(){				
+					console.log("AlpacaModule AlpacaController init");
+				},
+				
+				release:function(){
+					console.log("AlpacaModule AlpacaController release");
+				},
+				
 				indexAction: function(){
 					alert("This is index action !");
 				},
@@ -450,7 +545,9 @@ var Alpaca = {
 					document.write("Welcome to use Alpaca SPA.");
 				},								
 			},			
-		},								
+		},	
+		
+		isLoadOnhashchange: true,
 }
 
 var View = Alpaca.ViewModel.create;
@@ -598,3 +695,58 @@ var View = Alpaca.ViewModel.create;
 		return doT.template(tmpl, null, def);
 	};
 }());
+
+(function(win){
+	 
+    var hashchange = win.onhashchange, change, //for IE
+    loc = location,
+    hash = loc.hash,
+    delay = 50;
+     
+    function gethash(hash){
+    	return hash.replace(/^#/,"");
+    }
+    
+    win.onhashchange = function(func){
+    	if(hashchange){
+    		hashchange = function(){
+    			func(gethash(loc.hash));
+    			}
+    	}else{
+    		setTimeout(function change(){
+    			if(loc.hash !== hash){    				
+    				func(gethash(loc.hash));
+    				hash = loc.hash;
+    			}
+    			setTimeout(change, delay);
+    			},delay);
+    	}
+    };
+}(window));
+
+window.onhashchange(function(hash){		
+	if(Alpaca.isLoadOnhashchange){
+	    Alpaca.forward(window.location.hash);
+	}
+	Alpaca.isLoadOnhashchange =true;
+});
+
+
+//jquery  extend
+
+$.extend({
+	 getUrlVars: function(){
+	  var vars = [], hash;
+	  var hashes = window.location.href.slice(window.location.href.indexOf('?') + 1).split('&');
+	  for(var i = 0; i < hashes.length; i++)
+	  {
+	   hash = hashes[i].split('=');
+	   vars.push(hash[0]);
+	   vars[hash[0]] = decodeURI(hash[1]);
+	  }
+	  return vars;
+	 },
+	 getUrlVar: function(name){
+	  return $.getUrlVars()[name];
+	 }
+});
