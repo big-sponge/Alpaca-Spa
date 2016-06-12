@@ -54,7 +54,10 @@ Alpaca.TestModule ={
 		Index2Controller:{			
 			indexAction: function(){				
 				//模板加载到body里面，下面语句成功之后，模板的内容是  $(test1).html()。可以看出 setTemplate中的 #test1 替换了 setFuncGetTemplate中的 id。
-				return new View().setCaptureTo("body").setFuncGetTemplate(function(id){return $(id).html();}).setTemplate("#test1");
+				return new View().
+				setCaptureTo("body").
+				setFuncGetTemplate(function(id){return $(id).html();}).
+				setTemplate("#test1");
 			},
 			
 			index2Action: function(){									

@@ -140,13 +140,13 @@ var Alpaca = {
 				    }
 			    	
 				    if(!segments[3]){	    				    	
-				    	segments.splice(1, 0, this.DefaultController); 
+				    	segments.splice(2, 0, this.DefaultController); 
 				    }
 				    
 				    if(!segments[3]){	    				    	
-				    	segments.splice(1, 0, this.DefaultController); 
+				    	segments.splice(3, 0, this.DefaultAction); 
 				    }
-		    
+				    
 				    //保存路由中的其他字段到参数
 				    this.Params = segments.slice(4);
 				    				    
